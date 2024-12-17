@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     "name": "Perakit Kunci Digital",
     "description": "Extensi browser untuk password generator dan 2fa code berada di satu tempat",
-    "version":"1.0.2",
+    "version":"1.0.4",
     "homepage_url": "https://perakit.com",
     "minimum_chrome_version" : "114",
     "offline_enabled": true,

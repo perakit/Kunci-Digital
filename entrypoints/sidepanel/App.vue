@@ -88,10 +88,15 @@ onMounted(() => {
 
     (async () => {
         const isPassSet = await chrome.storage.local.get(["isPassSet"])
+
         if(isPassSet['isPassSet'] === undefined) {
             isPassphraseVisible.value = true;
         } else {
-            isUnlockVisible.value = true;
+            const passSession = await chrome.storage.session.get(["passphrase"]);
+            
+            if(!passSession['passphrase']) {
+                isUnlockVisible.value = true;
+            }
         }
     })();
 });
