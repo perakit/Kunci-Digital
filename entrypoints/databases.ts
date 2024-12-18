@@ -126,11 +126,12 @@ class IDBDatabases {
                     accounts.push(cursor.value);
                 }
                 for await(const account of accounts) {
+
                     db.put('accounts', {
                         ...account,
-                        secret: await this.encript(account.secret),
-                        password: await this.encript(account.password),
-                        notes: await this.encript(account.notes),
+                        secret: account.secret == "" ? "" : await this.encript(account.secret),
+                        password: account.password == "" ? "" : await this.encript(account.password),
+                        notes: account.notes == "" ? "" : await this.encript(account.notes),
                     });
                 }
                 resolve(accounts);
@@ -162,9 +163,9 @@ class IDBDatabases {
                     }
                 }
                 for await(const account of accounts) {
-                    account.secret = await this.dencript(account.secret);
-                    account.password = await this.dencript(account.password);
-                    account.notes = await this.dencript(account.notes);
+                    account.secret = account.secret == "" ? "" : await this.dencript(account.secret);
+                    account.password = account.password == "" ? "" : await this.dencript(account.password);
+                    account.notes = account.notes == "" ? "" : await this.dencript(account.notes);
                 }
                 resolve(accounts);
             }).catch(e => reject(e));
@@ -179,18 +180,18 @@ class IDBDatabases {
                 email: account.email,
                 time: account.time,
                 avatar: account.avatar,
-                password: await this.encript(account.password),
-                secret: await this.encript(account.secret),
-                notes: await this.encript(account.notes),
+                secret: account.secret == "" ? "" : await this.encript(account.secret),
+                password: account.password == "" ? "" : await this.encript(account.password),
+                notes: account.notes == "" ? "" : await this.encript(account.notes),
             })
             .then(() => db.transaction('accounts').store.openCursor(null, 'prev'))
             .then(cursor => cursor?.value )
             .then(async account => {
                 return {
                     ...account,
-                    secret: await this.dencript(account.secret),
-                    password: await this.dencript(account.password),
-                    notes: await this.dencript(account.notes)
+                    secret: account.secret == "" ? "" : await this.dencript(account.secret),
+                    password: account.password == "" ? "" : await this.dencript(account.password),
+                    notes: account.notes == "" ? "" : await this.dencript(account.notes)
                 } 
             });
         })
@@ -199,9 +200,9 @@ class IDBDatabases {
         return this.dbPromise.then(async (db) => {
             return db.put('accounts', {
                 ...account,
-                secret: await this.encript(account.secret),
-                password: await this.encript(account.password),
-                notes: await this.encript(account.notes)
+                secret: account.secret == "" ? "" : await this.encript(account.secret),
+                password: account.password == "" ? "" : await this.encript(account.password),
+                notes: account.notes == "" ? "" : await this.encript(account.notes)
             })
             .then(() => this.removeWebsites(account.id))
             .then(() => {
@@ -293,9 +294,9 @@ class IDBDatabases {
                 }
                 
                 for await(const account of accounts) {
-                    account.secret = await this.dencript(account.secret)
-                    account.password = await this.dencript(account.password)
-                    account.notes = await this.dencript(account.notes)
+                    account.secret = account.secret == "" ? "" : await this.dencript(account.secret)
+                    account.password = account.password == "" ? "" : await this.dencript(account.password)
+                    account.notes = account.notes == "" ? "" : await this.dencript(account.notes)
                 }
                 resolve(accounts);
             }).catch(e => reject(e));
