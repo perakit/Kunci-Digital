@@ -73,8 +73,15 @@ const validatePasspharase = async () => {
     }
 }
 
+const channelCallback = (event: MessageEvent<any>) => {
+    if(event.data == 'isPassClear') {
+        isUnlockVisible.value = true;
+    }
+}
+
 onMounted(() => {
     const submenuToggles = document.querySelectorAll('.submenu-toggle');
+    channel.addEventListener('message', channelCallback);
 
     submenuToggles.forEach(toggle => {
         toggle.addEventListener('click', () => {
@@ -96,6 +103,8 @@ onMounted(() => {
             
             if(!passSession['passphrase']) {
                 isUnlockVisible.value = true;
+            }else {
+                channel.postMessage("isPassSet");
             }
         }
     })();
@@ -103,6 +112,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('hashchange', handleHashChange);
+    channel.removeEventListener('message', channelCallback);
 });
 </script>
 
