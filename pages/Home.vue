@@ -8,6 +8,7 @@ import { generatePassword } from '@/entrypoints/password-generator';
 import IDBDatabases from '@/entrypoints/databases';
 import { Totp } from "@/entrypoints/jsOTP";
 
+const channel = new BroadcastChannel('isPassSet');
 const idbMan = new IDBDatabases();
 let defaultLocker = localStorage.getItem("defaultLocker") ?? 1;
 const restoreSelectedLocker = ref(defaultLocker);
@@ -185,6 +186,27 @@ const fillPassword = () => {
 
 const openUrl = (url: string) => {
     chrome.tabs.create({ url: url });
+}
+
+const lockExtension = () => {
+    lockers.value = [];
+    accounts.value = [];
+    selectedAccount.value = {
+        "id": 0,
+        "locker_id": 0,
+        "account": "",
+        "username": "",
+        "email": "",
+        "password": "",
+        "secret": "",
+        "time": "",
+        "notes": "",
+        "avatar": ""
+    };
+    isDrawerAsideOpen.value = false;
+    chrome.storage.session.clear().then(() => {
+        channel.postMessage("isPassClear");
+    });
 }
 
 const validateUrl = (index: number) => {
@@ -375,10 +397,8 @@ var getNextTOTP = function(secret: string) {
     nextCode.value = totp.getOtp(secret, plus);
 }
 
-
-const channel = new BroadcastChannel('isPassSet');
 const channelCallback = (event: MessageEvent<any>) => {
-    if(event.data == 'isPassSet') {
+    if(event.data == 'isPassSet' && (selectedAccount.value?.id ?? 0) == 0) {
         refreshLockers().then(_ => {
             refreshAccounts();
         });
@@ -754,6 +774,13 @@ onBeforeUnmount(() => {
                                 <path d="M8 2a2 2 0 0 0 2-2h2.5A1.5 1.5 0 0 1 14 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5v-13A1.5 1.5 0 0 1 3.5 0H6a2 2 0 0 0 2 2m0 1a3 3 0 0 1-2.83-2H3.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-1.67A3 3 0 0 1 8 3" />
                             </svg>
                         </a>
+                        <button @click="lockExtension"
+                            class="w-full flex items-center hover:bg-gray-800 p-3 justify-between">
+                            <span>Kunci Extensi</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-lock" viewBox="0 0 16 16">
+                                <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2M5 8h6a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1"/>
+                            </svg>
+                        </button>
                         <button @click="openUrl('https://github.com/perakit/kunci-digital')"
                             class="w-full flex items-center hover:bg-gray-800 p-3 justify-between">
                             <span>Github (Source Code)</span>
