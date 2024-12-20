@@ -7,8 +7,8 @@ import Website from '@/interfaces/Website';
 import { generatePassword } from '@/entrypoints/password-generator';
 import IDBDatabases from '@/entrypoints/databases';
 import { Totp } from "@/entrypoints/jsOTP";
+import SymmetricPGPEncryption from '@/entrypoints/pgp';
 
-const channel = new BroadcastChannel('isPassSet');
 const idbMan = new IDBDatabases();
 let defaultLocker = localStorage.getItem("defaultLocker") ?? 1;
 const restoreSelectedLocker = ref(defaultLocker);
@@ -186,27 +186,6 @@ const fillPassword = () => {
 
 const openUrl = (url: string) => {
     chrome.tabs.create({ url: url });
-}
-
-const lockExtension = () => {
-    lockers.value = [];
-    accounts.value = [];
-    selectedAccount.value = {
-        "id": 0,
-        "locker_id": 0,
-        "account": "",
-        "username": "",
-        "email": "",
-        "password": "",
-        "secret": "",
-        "time": "",
-        "notes": "",
-        "avatar": ""
-    };
-    isDrawerAsideOpen.value = false;
-    chrome.storage.session.clear().then(() => {
-        channel.postMessage("isPassClear");
-    });
 }
 
 const validateUrl = (index: number) => {
@@ -397,25 +376,113 @@ var getNextTOTP = function(secret: string) {
     nextCode.value = totp.getOtp(secret, plus);
 }
 
-const channelCallback = (event: MessageEvent<any>) => {
-    if(event.data == 'isPassSet' && (selectedAccount.value?.id ?? 0) == 0) {
-        refreshLockers().then(_ => {
-            refreshAccounts();
-        });
-    }
-}
-
 function copy(content: string) {
   navigator.clipboard.writeText(content);
 }
 
-onMounted(() => {
-    channel.addEventListener('message', channelCallback);
-})
+const passphrase = ref("");
+const rpassphrase = ref("");
+const isPassphraseError = ref("");
+const isPassphraseVisible = ref(false);
+const isUnlockVisible = ref(false);
 
-onBeforeUnmount(() => {
-    channel.removeEventListener('message', channelCallback);
-});
+const lockManagement = () => {
+    lockers.value = [];
+    accounts.value = [];
+    selectedAccount.value = {
+        "id": 0,
+        "locker_id": 0,
+        "account": "",
+        "username": "",
+        "email": "",
+        "password": "",
+        "secret": "",
+        "time": "",
+        "notes": "",
+        "avatar": ""
+    };
+    isDrawerAsideOpen.value = false;
+    chrome.storage.session.clear().then(() => {
+        passphrase.value = "";
+        isUnlockVisible.value = true;
+    });
+}
+
+const confirmSetPassphrase = async () => {
+
+    if(passphrase.value != rpassphrase.value) {
+        isPassphraseError.value = "Passphrase tidak sama";
+        return;
+    }
+    
+    const pass = passphrase.value;
+    const symmetricEncript = new SymmetricPGPEncryption(pass);
+    const encrypt = await symmetricEncript.encryptMessage('password-is-set');
+    
+    if(encrypt.status == "error") {
+        return console.error(encrypt.message);
+    }
+
+    chrome.storage.local.set({ isPassSet: encrypt.message }, function() {
+        chrome.storage.session.set({ passphrase: pass }, function() {
+            isPassphraseVisible.value = false;
+            idbMan.setPass();
+            idbMan.encriptAllAccounts().then(() => {
+                refreshLockers().then(_ => {
+                    refreshAccounts();
+                });
+            });
+        });
+    });
+}
+
+const validatePasspharase = async () => {
+    const pass = passphrase.value;
+    const symmetricEncript = new SymmetricPGPEncryption(pass);
+    
+    const isPassSet = await chrome.storage.local.get(["isPassSet"]);
+    const message = isPassSet['isPassSet'];
+    try {
+        const decrypt = await symmetricEncript.decryptMessage(message);
+        
+        if(decrypt.message == 'password-is-set') {
+            chrome.storage.session.set({ passphrase: pass }, () => {
+                isUnlockVisible.value = false;
+                refreshLockers().then(_ => {
+                    refreshAccounts();
+                });
+            });
+            passphrase.value = "";
+        } else {
+            isPassphraseError.value = decrypt.message;
+        }
+    } catch (error) {
+        console.error(error);
+        passphrase.value = "";
+    }
+}
+
+onMounted(() => {
+    (async () => {
+        const isPassSet = await chrome.storage.local.get(["isPassSet"])
+
+        if(isPassSet['isPassSet'] === undefined) {
+            isPassphraseVisible.value = true;
+        
+        } else {
+            const passSession = await chrome.storage.session.get(["passphrase"]);
+            
+            if(!passSession['passphrase']) {
+                isUnlockVisible.value = true;
+            
+            } else if ((selectedAccount.value?.id ?? 0) == 0) {
+                refreshLockers().then(_ => {
+                    refreshAccounts();
+                });
+            }
+        }
+    })();
+})
 
 </script>
 
@@ -775,7 +842,7 @@ onBeforeUnmount(() => {
                                 <path d="M8 2a2 2 0 0 0 2-2h2.5A1.5 1.5 0 0 1 14 1.5v13a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5v-13A1.5 1.5 0 0 1 3.5 0H6a2 2 0 0 0 2 2m0 1a3 3 0 0 1-2.83-2H3.5a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-1.67A3 3 0 0 1 8 3" />
                             </svg>
                         </a>
-                        <button @click="lockExtension"
+                        <button @click="lockManagement"
                             class="w-full flex items-center hover:bg-gray-800 p-3 justify-between">
                             <span>Kunci Extensi</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-lock" viewBox="0 0 16 16">
@@ -931,6 +998,69 @@ onBeforeUnmount(() => {
                                     class="px-4 py-2 bg-gray-700 text-gray-200 rounded hover:bg-gray-800">Batal</button>
                                 <button @click="confirmDeleteBin"
                                     class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">Hapus</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+        </teleport>
+
+        <teleport to="body">
+            <transition enter-active-class="transition ease-out duration-300"
+                enter-from-class="opacity-0 translate-y-10 scale-95"
+                enter-to-class="opacity-100 translate-y-0 scale-100"
+                leave-active-class="transition ease-in duration-200"
+                leave-from-class="opacity-100 translate-y-0 scale-100"
+                leave-to-class="opacity-0 translate-y-10 scale-95">
+                <div class="fixed inset-0 z-50" v-if="isPassphraseVisible">
+                    <div class="fixed inset-0 bg-gray-800 bg-opacity-25"></div>
+                    <div class="fixed inset-0 flex items-center justify-center">
+                        <div class="bg-gray-900 rounded-lg shadow-lg p-6 w-96">
+                            <h2 class="text-lg font-semibold mb-4">Silahkan atur Passphrase baru</h2>
+                            <p class="text-gray-200 mb-4">Semua password dan note yang telah di simpan akan dienkripsi menggunakan passphrase.</p>
+                            <div class="">
+                                <label for="password" class="block font-medium mb-2">Passphrase Baru</label>
+                                <input v-model="passphrase" @change="isPassphraseError = ''" @keyup.enter="confirmSetPassphrase" type="password" id="password"
+                                    class="bg-gray-800 border-gray-700 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                            </div>
+                            <div class="mt-1 text-red-500" v-if="isPassphraseError" v-text="isPassphraseError"></div>
+                            <div class="mt-4 mb-6">
+                                <label for="repat-password" class="block font-medium mb-2">Ulangi Passphrase Baru</label>
+                                <input v-model="rpassphrase" @change="isPassphraseError = ''" @keyup.enter="confirmSetPassphrase" type="password" id="repat-password"
+                                    class="bg-gray-800 border-gray-700 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                            </div>
+                            <div class="flex justify-end space-x-4">
+                                <button @click="confirmSetPassphrase"
+                                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Atur Passphrase</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+        </teleport>
+
+        <teleport to="body">
+            <transition enter-active-class="transition ease-out duration-300"
+                enter-from-class="opacity-0 translate-y-10 scale-95"
+                enter-to-class="opacity-100 translate-y-0 scale-100"
+                leave-active-class="transition ease-in duration-200"
+                leave-from-class="opacity-100 translate-y-0 scale-100"
+                leave-to-class="opacity-0 translate-y-10 scale-95">
+                <div class="fixed inset-0 z-50" v-if="isUnlockVisible">
+                    <div class="fixed inset-0 bg-gray-800 bg-opacity-25"></div>
+                    <div class="fixed inset-0 flex items-center justify-center">
+                        <div class="bg-gray-900 rounded-lg shadow-lg p-6 w-96">
+                            <h2 class="text-lg font-semibold mb-4">Silahkan masukkan Passphrase</h2>
+                            <p class="text-gray-200 mb-4">Untuk melihat password dan note yang telah anda simpan.</p>
+                            <div class="">
+                                <label for="password" class="block font-medium mb-2">Passphrase</label>
+                                <input v-model="passphrase" @change="isPassphraseError = ''" @keyup.enter="validatePasspharase" type="password" id="password"
+                                    class="bg-gray-800 border-gray-700 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                            </div>
+                            <div class="mt-1 text-red-500" v-if="isPassphraseError" v-text="isPassphraseError"></div>
+                            <div class="mt-6 flex justify-end space-x-4">
+                                <button @click="validatePasspharase"
+                                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Unlock</button>
                             </div>
                         </div>
                     </div>
